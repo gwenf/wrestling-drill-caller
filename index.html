@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wrestling Drill Caller</title>
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#181b22; --line:#2a2f3a; --text:#eef0f4; --muted:#9aa3b2;
+    --accent:#ff5a36; --accent2:#2bd4a4; --warn:#ffcc4d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+  main{max-width:560px;margin:0 auto;padding:16px 16px 48px}
+  h1{font-size:20px;margin:4px 0 12px;letter-spacing:.02em}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:24px 0 8px}
+  .call{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 16px;text-align:center;min-height:150px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+  .call .status{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacing:.12em}
+  .call .move{font-size:34px;font-weight:800;line-height:1.1}
+  .call .timer{font-variant-numeric:tabular-nums;color:var(--muted);font-size:15px}
+  .call.flash .move{color:var(--accent)}
+  .call.rest .move{color:var(--accent2)}
+  .controls{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-top:12px}
+  button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);font-weight:700;font-size:18px}
+  button.primary.stop{background:#3a3f4b;border-color:#3a3f4b}
+  button:active{transform:scale(.98)}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:none}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px 14px}
+  label.move-opt{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+  label.move-opt span{overflow:hidden;text-overflow:ellipsis}
+  input[type=checkbox]{width:22px;height:22px;accent-color:var(--accent)}
+  .cat{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px;white-space:nowrap}
+  .tally{display:flex;align-items:center;gap:8px}
+  .tally .n{font-variant-numeric:tabular-nums;min-width:34px;text-align:right;font-weight:700}
+  .tally .s{font-variant-numeric:tabular-nums;color:var(--accent2);font-size:13px;min-width:34px;text-align:right}
+  .mini{padding:4px 10px;border-radius:8px;font-size:14px}
+  .setting{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .setting:last-child{border-bottom:none}
+  .setting input[type=number]{width:72px;font:inherit;color:var(--text);background:#0f1115;border:1px solid var(--line);border-radius:8px;padding:6px 8px;text-align:center}
+  .setting select{max-width:200px;font:inherit;color:var(--text);background:#0f1115;border:1px solid var(--line);border-radius:8px;padding:6px}
+  .setting input[type=range]{flex:1;max-width:180px;accent-color:var(--accent)}
+  .muted{color:var(--muted);font-size:13px}
+  .add{display:flex;gap:8px;padding:10px 0}
+  .add input,.add select{font:inherit;color:var(--text);background:#0f1115;border:1px solid var(--line);border-radius:8px;padding:8px}
+  .add input{flex:1;min-width:0}
+  .totals{display:flex;gap:10px;margin-top:8px}
+  .totals div{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+  .totals b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+  .totals span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .legend{display:flex;justify-content:flex-end;gap:16px;font-size:12px;color:var(--muted);padding:6px 0 0}
+  .legend .s{color:var(--accent2)}
+  .save{font-size:12px;color:var(--muted);text-align:right;margin-top:6px;min-height:16px}
+  .del{background:none;border:none;color:var(--muted);padding:4px 6px;font-size:16px}
+  .confirm{display:none;gap:8px;margin-top:10px}
+  .confirm.show{display:flex}
+</style>
+</head>
+<body>
+<main>
+  <h1>🤼 Wrestling Drill Caller</h1>
+
+  <div class="call" id="callBox">
+    <div class="status" id="status">Ready</div>
+    <div class="move" id="moveText">Press Start</div>
+    <div class="timer" id="timer">&nbsp;</div>
+  </div>
+  <div class="controls">
+    <button class="primary" id="startBtn">Start</button>
+    <button id="pauseBtn" disabled>Pause</button>
+  </div>
+
+  <div class="totals">
+    <div><b id="sessTotal">0</b><span>This session</span></div>
+    <div><b id="allTotal">0</b><span>All time</span></div>
+    <div><b id="roundNow">–</b><span>Round</span></div>
+  </div>
+
+  <h2>Moves &amp; tally</h2>
+  <div class="card" id="moveList"></div>
+  <div class="legend"><span><span class="s">green</span> = this session</span><span><b>white</b> = all time</span></div>
+  <div class="add">
+    <input id="newMove" placeholder="Add a move (e.g. Snap down)" maxlength="40">
+    <select id="newCat"><option>Shot</option><option>Movement</option><option>Defense</option><option>Other</option></select>
+    <button class="mini" id="addBtn">Add</button>
+  </div>
+  <div class="save" id="saveState"></div>
+
+  <h2>Timing</h2>
+  <div class="card">
+    <div class="setting"><span>Seconds between calls</span><span><input type="number" id="minGap" min="1" max="30" step="0.5"> – <input type="number" id="maxGap" min="1" max="30" step="0.5"></span></div>
+    <div class="setting"><span>Round length (sec)</span><input type="number" id="roundLen" min="10" max="900" step="10"></div>
+    <div class="setting"><span>Rest (sec)</span><input type="number" id="restLen" min="0" max="300" step="5"></div>
+    <div class="setting"><span>Rounds</span><input type="number" id="rounds" min="1" max="20"></div>
+    <div class="setting"><span>Shots vs. movement</span><span class="muted" style="display:flex;align-items:center;gap:8px">Move <input type="range" id="shotBias" min="0" max="100"> Shot</span></div>
+  </div>
+  <p class="muted">Each call is counted the moment it's spoken. Use − / + to fix a rep you missed or didn't do.</p>
+
+  <h2>Voice</h2>
+  <div class="card">
+    <div class="setting"><span>Voice</span><select id="voiceSel"></select></div>
+    <div class="setting"><span>Speed</span><input type="range" id="rate" min="0.7" max="1.6" step="0.05"></div>
+    <div class="setting"><span>Test</span><button class="mini" id="testBtn">Say "High crotch"</button></div>
+  </div>
+
+  <h2>Reset</h2>
+  <div class="card">
+    <div class="setting"><span>Clear session counts</span><button class="mini" id="resetSess">Clear</button></div>
+    <div class="setting"><span>Clear all-time counts</span><button class="mini" id="resetAll">Clear…</button></div>
+  </div>
+  <div class="confirm" id="confirmBox">
+    <span class="muted" style="flex:1;align-self:center">Wipe all-time tallies?</span>
+    <button class="mini" id="confirmYes" style="background:var(--accent);border-color:var(--accent)">Yes, wipe</button>
+    <button class="mini" id="confirmNo">Cancel</button>
+  </div>
+</main>
+
+<script>
+(function(){
+  const DEFAULT_MOVES = [
+    {id:"circle-left",  name:"Circle left",  say:"Circle left",  cat:"Movement", on:true},
+    {id:"circle-right", name:"Circle right", say:"Circle right", cat:"Movement", on:true},
+    {id:"level-change", name:"Level change", say:"Level change", cat:"Movement", on:true},
+    {id:"down-block",   name:"Down block",   say:"Down block",   cat:"Defense",  on:true},
+    {id:"sprawl",       name:"Sprawl",       say:"Sprawl",       cat:"Defense",  on:false},
+    {id:"single",       name:"Single leg",   say:"Single leg",   cat:"Shot",     on:true},
+    {id:"double",       name:"Double leg",   say:"Double leg",   cat:"Shot",     on:true},
+    {id:"high-crotch",  name:"High crotch",  say:"High crotch",  cat:"Shot",     on:true},
+    {id:"knee-single",  name:"Knee-down single", say:"Knee down single", cat:"Shot", on:true},
+    {id:"knee-single-double", name:"Knee-down single to double", say:"Knee down single, to double", cat:"Shot", on:true},
+    {id:"snap-down",    name:"Snap down",    say:"Snap down",    cat:"Other",    on:false},
+  ];
+
+  let state = {
+    moves: DEFAULT_MOVES.map(m=>({...m})),
+    counts: {},          // all-time, by move id
+    settings: {minGap:3, maxGap:6, roundLen:120, restLen:30, rounds:3, shotBias:50, rate:1.05, voice:""}
+  };
+  let session = {};      // session counts by move id
+
+  const $ = id => document.getElementById(id);
+
+  // ---------- persistence: saved on this device (localStorage) ----------
+  const LS_KEY = "wrestling-drill-caller-v1";
+  function lsLoad(){ try{ const s = localStorage.getItem(LS_KEY); return s ? JSON.parse(s) : null; }catch(e){ return null; } }
+  function merge(saved){
+    if(!saved || typeof saved !== "object") return;
+    if(Array.isArray(saved.moves) && saved.moves.length) state.moves = saved.moves;
+    if(saved.counts && typeof saved.counts === "object") state.counts = saved.counts;
+    if(saved.settings) state.settings = Object.assign(state.settings, saved.settings);
+  }
+  function scheduleSave(){
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); $("saveState").textContent = "Saved on this device"; }
+    catch(e){ $("saveState").textContent = "Couldn't save (private browsing?)"; }
+  }
+  function flush(){}
+
+  // ---------- speech ----------
+  const synth = window.speechSynthesis;
+  let voices = [];
+  function populateVoices(){
+    if(!synth) { $("voiceSel").innerHTML = "<option>Speech not supported</option>"; return; }
+    voices = synth.getVoices().filter(v => /^en/i.test(v.lang));
+    if(!voices.length) voices = synth.getVoices();
+    const sel = $("voiceSel");
+    sel.innerHTML = '<option value="">Default</option>' + voices.map(v=>`<option value="${v.name.replace(/"/g,'&quot;')}">${v.name} (${v.lang})</option>`).join("");
+    sel.value = state.settings.voice || "";
+  }
+  if(synth){ populateVoices(); synth.onvoiceschanged = populateVoices; }
+
+  function say(text){
+    if(!synth) return;
+    try{
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = Number(state.settings.rate) || 1;
+      const v = voices.find(v=>v.name === state.settings.voice);
+      if(v) u.voice = v;
+      synth.speak(u);
+    }catch(e){}
+  }
+
+  // ---------- UI ----------
+  function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+  function renderMoves(){
+    const list = $("moveList");
+    list.innerHTML = state.moves.map((m,i)=>`
+      <div class="row">
+        <label class="move-opt"><input type="checkbox" data-i="${i}" ${m.on?"checked":""}><span>${esc(m.name)}</span></label>
+        <span class="cat">${esc(m.cat)}</span>
+        <div class="tally">
+          <button class="mini" data-dec="${i}">−</button>
+          <span class="s">${session[m.id]||0}</span>
+          <span class="n">${state.counts[m.id]||0}</span>
+          <button class="mini" data-inc="${i}">+</button>
+          ${m.custom?`<button class="del" data-del="${i}" title="Remove">✕</button>`:""}
+        </div>
+      </div>`).join("");
+    updateTotals();
+  }
+  function updateTotals(){
+    $("sessTotal").textContent = Object.values(session).reduce((a,b)=>a+b,0);
+    $("allTotal").textContent = Object.values(state.counts).reduce((a,b)=>a+b,0);
+  }
+
+  $("moveList").addEventListener("click", e=>{
+    const t = e.target;
+    if(t.dataset.inc!==undefined){ bump(state.moves[+t.dataset.inc].id, 1); }
+    else if(t.dataset.dec!==undefined){ bump(state.moves[+t.dataset.dec].id, -1); }
+    else if(t.dataset.del!==undefined){ state.moves.splice(+t.dataset.del,1); renderMoves(); scheduleSave(); }
+  });
+  $("moveList").addEventListener("change", e=>{
+    const t = e.target;
+    if(t.dataset.i!==undefined){ state.moves[+t.dataset.i].on = t.checked; scheduleSave(); }
+  });
+
+  function bump(id, d){
+    state.counts[id] = Math.max(0, (state.counts[id]||0) + d);
+    session[id] = Math.max(0, (session[id]||0) + d);
+    renderMoves(); scheduleSave();
+  }
+
+  $("addBtn").addEventListener("click", ()=>{
+    const name = $("newMove").value.trim();
+    if(!name) return;
+    const id = "custom-" + name.toLowerCase().replace(/[^a-z0-9]+/g,"-") + "-" + Date.now().toString(36);
+    state.moves.push({id, name, say:name, cat:$("newCat").value, on:true, custom:true});
+    $("newMove").value = "";
+    renderMoves(); scheduleSave();
+  });
+
+  const fields = ["minGap","maxGap","roundLen","restLen","rounds","shotBias","rate"];
+  function applySettingsToUI(){ fields.forEach(f=>$(f).value = state.settings[f]); }
+  fields.forEach(f=>$(f).addEventListener("change", ()=>{
+    let v = parseFloat($(f).value);
+    if(isNaN(v)) v = state.settings[f];
+    state.settings[f] = v;
+    if(state.settings.maxGap < state.settings.minGap){ state.settings.maxGap = state.settings.minGap; $("maxGap").value = state.settings.maxGap; }
+    scheduleSave();
+  }));
+  $("voiceSel").addEventListener("change", ()=>{ state.settings.voice = $("voiceSel").value; scheduleSave(); });
+  $("testBtn").addEventListener("click", ()=>say("High crotch"));
+
+  $("resetSess").addEventListener("click", ()=>{ session = {}; renderMoves(); });
+  $("resetAll").addEventListener("click", ()=>$("confirmBox").classList.add("show"));
+  $("confirmNo").addEventListener("click", ()=>$("confirmBox").classList.remove("show"));
+  $("confirmYes").addEventListener("click", ()=>{ state.counts = {}; session = {}; $("confirmBox").classList.remove("show"); renderMoves(); scheduleSave(); });
+
+  // ---------- drill engine ----------
+  let running = false, paused = false, phase = "idle", round = 0, phaseEnd = 0, nextCallAt = 0, lastId = null, tick = null, pausedRemain = null, wakeLock = null;
+
+  function pickMove(){
+    const on = state.moves.filter(m=>m.on);
+    if(!on.length) return null;
+    const bias = state.settings.shotBias/100;           // 0 = movement-heavy, 1 = shot-heavy
+    const weighted = on.map(m=>{
+      let w = m.cat==="Shot" ? 0.3 + bias*1.4 : 1.7 - bias*1.4;
+      if(m.cat==="Other") w = 1;
+      if(m.id===lastId && on.length>1) w *= 0.15;          // avoid back-to-back repeats
+      return {m, w:Math.max(0.05,w)};
+    });
+    let r = Math.random() * weighted.reduce((a,b)=>a+b.w,0);
+    for(const x of weighted){ r -= x.w; if(r<=0) return x.m; }
+    return weighted[weighted.length-1].m;
+  }
+  function gap(){
+    const a = state.settings.minGap, b = Math.max(a, state.settings.maxGap);
+    return (a + Math.random()*(b-a)) * 1000;
+  }
+  function show(status, move, cls){
+    $("status").textContent = status;
+    $("moveText").textContent = move;
+    const box = $("callBox");
+    box.classList.remove("flash","rest");
+    if(cls){ void box.offsetWidth; box.classList.add(cls); }
+  }
+  function fmt(ms){ const s = Math.max(0, Math.ceil(ms/1000)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
+
+  function startRound(){
+    round++; phase = "work";
+    $("roundNow").textContent = round + "/" + state.settings.rounds;
+    phaseEnd = Date.now() + state.settings.roundLen*1000;
+    nextCallAt = Date.now() + 1800;
+    show("Round " + round, "Wrestle!");
+    say("Round " + round + ". Wrestle.");
+  }
+  function startRest(){
+    phase = "rest";
+    phaseEnd = Date.now() + state.settings.restLen*1000;
+    show("Rest", "Breathe", "rest");
+    say("Time. Rest.");
+  }
+  function finish(){
+    stop();
+    show("Done", "Nice work 💪", "rest");
+    say("Time. Session done. Good work.");
+  }
+
+  function loop(){
+    if(!running || paused) return;
+    const now = Date.now();
+    if(phase==="countdown"){
+      const left = phaseEnd - now;
+      $("timer").textContent = "Starting in " + Math.ceil(left/1000);
+      if(left<=0) startRound();
+      return;
+    }
+    $("timer").textContent = (phase==="work"?"Round ":"Rest ") + fmt(phaseEnd-now);
+    if(phase==="work"){
+      if(now >= phaseEnd){
+        if(round >= state.settings.rounds) return finish();
+        return state.settings.restLen>0 ? startRest() : startRound();
+      }
+      if(now >= nextCallAt && phaseEnd - now > 1200){
+        const m = pickMove();
+        if(!m){ show("No moves on","Tick some moves below"); nextCallAt = now + 2000; return; }
+        lastId = m.id;
+        show("Round " + round, m.name, "flash");
+        say(m.say || m.name);
+        bump(m.id, 1);
+        nextCallAt = now + gap();
+      }
+    } else if(phase==="rest"){
+      const left = phaseEnd - now;
+      if(left <= 3000 && left > 2000 && !loop.warned){ loop.warned = true; say("Get ready"); }
+      if(left<=0){ loop.warned = false; startRound(); }
+    }
+  }
+
+  async function lockScreen(){ try{ if(navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); }catch(e){} }
+  function unlockScreen(){ try{ wakeLock && wakeLock.release(); }catch(e){} wakeLock = null; }
+
+  function start(){
+    if(!state.moves.some(m=>m.on)){ show("No moves on","Tick some moves below"); return; }
+    running = true; paused = false; round = 0; lastId = null; loop.warned = false;
+    phase = "countdown"; phaseEnd = Date.now() + 3000;
+    show("Get set", "Stance up");
+    say("Stance up.");                   // first speak inside the tap so mobile allows audio
+    $("startBtn").textContent = "Stop"; $("startBtn").classList.add("stop");
+    $("pauseBtn").disabled = false; $("pauseBtn").textContent = "Pause";
+    lockScreen();
+    clearInterval(tick); tick = setInterval(loop, 100);
+  }
+  function stop(){
+    running = false; paused = false; phase = "idle";
+    clearInterval(tick);
+    if(synth) synth.cancel();
+    $("startBtn").textContent = "Start"; $("startBtn").classList.remove("stop");
+    $("pauseBtn").disabled = true; $("pauseBtn").textContent = "Pause";
+    $("timer").innerHTML = "&nbsp;"; $("roundNow").textContent = "–";
+    show("Ready","Press Start");
+    unlockScreen(); flush();
+  }
+  $("startBtn").addEventListener("click", ()=> running ? stop() : start());
+  $("pauseBtn").addEventListener("click", ()=>{
+    if(!running) return;
+    if(!paused){
+      paused = true; pausedRemain = {phase: phaseEnd - Date.now(), call: nextCallAt - Date.now()};
+      if(synth) synth.cancel();
+      $("pauseBtn").textContent = "Resume"; $("status").textContent = "Paused";
+    } else {
+      paused = false;
+      phaseEnd = Date.now() + pausedRemain.phase; nextCallAt = Date.now() + Math.max(1000, pausedRemain.call);
+      $("pauseBtn").textContent = "Pause";
+      say("Go");
+    }
+  });
+  document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && running) lockScreen(); });
+
+  // ---------- boot ----------
+  merge(lsLoad());
+  applySettingsToUI(); renderMoves(); populateVoices();
+  $("saveState").textContent = "Saved on this device";
+  if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+})();
+</script>
+</body>
+</html>
