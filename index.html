@@ -107,7 +107,7 @@
   <div class="card">
     <div class="setting"><span>Voice</span><select id="voiceSel"></select></div>
     <div class="setting"><span>Speed</span><input type="range" id="rate" min="0.7" max="1.6" step="0.05"></div>
-    <div class="setting"><span>Test</span><button class="mini" id="testBtn">Say "High crotch"</button></div>
+    <div class="setting"><span>Test</span><button class="mini" id="testBtn">Say "Level change"</button></div>
   </div>
 
   <h2>Reset</h2>
@@ -129,7 +129,7 @@
     {id:"circle-right", name:"Circle right", say:"Circle right", cat:"Movement", on:true},
     {id:"level-change", name:"Level change", say:"Level change", cat:"Movement", on:true},
     {id:"down-block",   name:"Down block",   say:"Down block",   cat:"Defense",  on:true},
-    {id:"sprawl",       name:"Sprawl",       say:"Sprawl",       cat:"Defense",  on:false},
+    {id:"sprawl",       name:"Sprawl",       say:"Sprawl",       cat:"Defense",  on:true},
     {id:"single",       name:"Single leg",   say:"Single leg",   cat:"Shot",     on:true},
     {id:"double",       name:"Double leg",   say:"Double leg",   cat:"Shot",     on:true},
     {id:"high-crotch",  name:"High crotch",  say:"High crotch",  cat:"Shot",     on:true},
@@ -139,6 +139,7 @@
   ];
 
   let state = {
+    defaultsVersion: 2,
     moves: DEFAULT_MOVES.map(m=>({...m})),
     counts: {},          // all-time, by move id
     settings: {minGap:3, maxGap:6, roundLen:120, restLen:30, rounds:3, shotBias:50, rate:1.05, voice:""}
@@ -155,6 +156,9 @@
     if(Array.isArray(saved.moves) && saved.moves.length) state.moves = saved.moves;
     if(saved.counts && typeof saved.counts === "object") state.counts = saved.counts;
     if(saved.settings) state.settings = Object.assign(state.settings, saved.settings);
+    // one-time update: turn Sprawl on for devices saved before it became a default
+    if((saved.defaultsVersion||1) < 2){ const sp = state.moves.find(m=>m.id==="sprawl"); if(sp) sp.on = true; }
+    state.defaultsVersion = 2;
   }
   function scheduleSave(){
     try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); $("saveState").textContent = "Saved on this device"; }
@@ -247,7 +251,7 @@
     scheduleSave();
   }));
   $("voiceSel").addEventListener("change", ()=>{ state.settings.voice = $("voiceSel").value; scheduleSave(); });
-  $("testBtn").addEventListener("click", ()=>say("High crotch"));
+  $("testBtn").addEventListener("click", ()=>say("Level change"));
 
   $("resetSess").addEventListener("click", ()=>{ session = {}; renderMoves(); });
   $("resetAll").addEventListener("click", ()=>$("confirmBox").classList.add("show"));
