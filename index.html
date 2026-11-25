@@ -35,7 +35,9 @@
   .row:last-child{border-bottom:none}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px 14px}
   label.move-opt{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
-  label.move-opt span{overflow:hidden;text-overflow:ellipsis}
+  label.move-opt span{overflow-wrap:anywhere}
+  label.move-opt input{flex:none}
+  @media (max-width:420px){ .row .cat{display:none} }
   input[type=checkbox]{width:22px;height:22px;accent-color:var(--accent)}
   .cat{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px;white-space:nowrap}
   .tally{display:flex;align-items:center;gap:8px}
@@ -68,11 +70,27 @@
   .combo-add{flex-wrap:wrap}
   .combo-add select{flex:1 1 28%;min-width:0}
   .combo-name{flex:1;min-width:0;font-size:15px}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .info-btn{width:36px;height:36px;padding:0;border-radius:50%;font-size:18px;font-weight:700;line-height:1;flex:none}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:flex-end;justify-content:center;z-index:10}
+  .modal.show{display:flex}
+  .sheet{background:var(--panel);border:1px solid var(--line);border-radius:18px 18px 0 0;max-width:560px;width:100%;max-height:88vh;overflow:auto;padding:18px 18px 32px}
+  @media (min-width:600px){ .modal{align-items:center} .sheet{border-radius:18px} }
+  .sheet h3{margin:18px 0 6px;font-size:16px}
+  .sheet h3:first-of-type{margin-top:4px}
+  .sheet p,.sheet li{color:#cfd4dd;font-size:15px}
+  .sheet ul{padding-left:20px;margin:6px 0}
+  .sheet .head{display:flex;justify-content:space-between;align-items:center;position:sticky;top:-18px;background:var(--panel);padding:4px 0 8px}
+  .diag{font:13px/1.5 ui-monospace,Menlo,monospace;background:#0f1115;border:1px solid var(--line);border-radius:10px;padding:10px;white-space:pre-wrap;word-break:break-word;color:#cfd4dd}
+  .ok{color:var(--accent2)} .bad{color:var(--warn)}
 </style>
 </head>
 <body>
 <main>
-  <h1>🤼 Wrestling Drill Caller</h1>
+  <div class="top">
+    <h1>🤼 Wrestling Drill Caller</h1>
+    <button class="info-btn" id="infoBtn" aria-label="How to use and troubleshooting">i</button>
+  </div>
   <div class="warn" id="speechWarn"></div>
 
   <div class="call" id="callBox">
@@ -151,6 +169,71 @@
     <button class="mini" id="confirmNo">Cancel</button>
   </div>
 </main>
+
+<div class="modal" id="infoModal" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+  <div class="sheet">
+    <div class="head"><strong id="infoTitle" style="font-size:18px">How to use</strong><button class="mini" id="infoClose">Close</button></div>
+
+    <h3>Basics</h3>
+    <ul>
+      <li>Tap <b>Start</b>. After a 3-second count-in, moves are called out at random intervals during each round.</li>
+      <li><b>Pause</b> freezes the round clock. <b>Stop</b> ends the session.</li>
+      <li>Your screen stays on while it runs, if your browser allows it.</li>
+    </ul>
+
+    <h3>Moves &amp; tally</h3>
+    <ul>
+      <li>Tick the moves you want called. Add your own with the box under the list.</li>
+      <li>Every call counts as a rep. <span class="ok">Green</span> is this session, white is all time.</li>
+      <li>Use − / + to fix a rep you missed or didn't do.</li>
+    </ul>
+
+    <h3>Combos</h3>
+    <ul>
+      <li>A combo is 2–3 moves called in order, with a short pause after each one finishes.</li>
+      <li>The slider sets how often a call is a combo instead of a single move.</li>
+      <li>Build combos with the dropdowns. Each step counts toward that move's tally.</li>
+    </ul>
+
+    <h3>Timing</h3>
+    <ul>
+      <li><b>Seconds between calls</b>: each gap is random within this range.</li>
+      <li><b>Shots vs. movement</b>: slide right for more shots, left for more footwork and defense.</li>
+    </ul>
+
+    <h3>Saving your data</h3>
+    <ul>
+      <li>Everything is saved in this browser on this device. It isn't synced anywhere.</li>
+      <li>Clearing website data or history deletes it. On iPhone, Safari can delete it after 7 days unused unless the app is added to your Home Screen.</li>
+      <li>Use <b>Backup → Download</b> now and then. <b>Upload</b> restores it on any device.</li>
+    </ul>
+
+    <h3>No sound?</h3>
+    <ul>
+      <li>Turn off silent mode and turn the volume up. iPhone silent mode can mute browser speech.</li>
+      <li>Tap <b>Start</b> or <b>Test</b> first. Phones block audio until you tap the page.</li>
+      <li>Some in-app browsers (like Arc Search) don't support speech. Open the link in Safari or Chrome instead.</li>
+      <li>Bluetooth headphones: check they're connected before you tap Start.</li>
+      <li>Try another voice in <b>Voice</b>. On iPhone, download an Enhanced voice in Settings → Accessibility → Spoken Content → Voices.</li>
+      <li>No microphone access is needed. The app only speaks.</li>
+    </ul>
+
+    <h3>Install as an app</h3>
+    <ul>
+      <li>iPhone (Safari): Share → Add to Home Screen.</li>
+      <li>Android (Chrome): ⋮ menu → Add to Home screen / Install app.</li>
+      <li>Once installed it works offline.</li>
+    </ul>
+
+    <h3>Diagnostics</h3>
+    <div class="diag" id="diag"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="mini" id="diagTest">Test sound</button>
+      <button class="mini" id="diagCopy">Copy diagnostics</button>
+    </div>
+    <p class="muted" id="diagMsg"></p>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -582,6 +665,45 @@
       applySettingsToUI(); renderMoves(); populateVoices(); scheduleSave();
       $("backupMsg").textContent = "Restored backup from " + f.name + ".";
     }catch(e){ $("backupMsg").textContent = "That file isn't a drill caller backup."; }
+  });
+
+  // ---------- info / diagnostics ----------
+  let lastSpeechResult = "not tested yet";
+  function storageOk(){ try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); return true; }catch(e){ return false; } }
+  function diagText(){
+    const all = synth ? synth.getVoices() : [];
+    const standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+    const sel = state.settings.voice || "Default";
+    return [
+      "Speech supported: " + (synth ? "yes" : "NO"),
+      "Voices available: " + all.length + " (" + voices.length + " English)",
+      "Selected voice: " + sel + (state.settings.voice && !voices.some(v=>v.name===state.settings.voice) ? " (NOT FOUND on this device)" : ""),
+      "Speaking now: " + (synth ? (synth.speaking ? "yes" : "no") : "n/a"),
+      "Last sound test: " + lastSpeechResult,
+      "Saving works: " + (storageOk() ? "yes" : "NO (private mode?)"),
+      "Installed to home screen: " + (standalone ? "yes" : "no"),
+      "Offline support: " + (("serviceWorker" in navigator) ? (navigator.serviceWorker.controller ? "active" : "not active yet") : "not supported"),
+      "Screen wake lock: " + (("wakeLock" in navigator) ? "supported" : "not supported"),
+      "Browser: " + navigator.userAgent
+    ].join("\n");
+  }
+  function refreshDiag(){ $("diag").textContent = diagText(); }
+  function openInfo(){ refreshDiag(); $("diagMsg").textContent = ""; $("infoModal").classList.add("show"); }
+  function closeInfo(){ $("infoModal").classList.remove("show"); }
+  $("infoBtn").addEventListener("click", openInfo);
+  $("infoClose").addEventListener("click", closeInfo);
+  $("infoModal").addEventListener("click", e=>{ if(e.target === $("infoModal")) closeInfo(); });
+  document.addEventListener("keydown", e=>{ if(e.key === "Escape") closeInfo(); });
+  $("diagTest").addEventListener("click", ()=>{
+    if(!synth){ lastSpeechResult = "speech not supported"; refreshDiag(); return; }
+    let started = false;
+    lastSpeechResult = "waiting…"; refreshDiag();
+    say("Level change", ()=>{ started = true; lastSpeechResult = "speech started OK"; refreshDiag(); });
+    setTimeout(()=>{ if(!started){ lastSpeechResult = "speech did NOT start (browser blocked it or no voice)"; refreshDiag(); } }, 2500);
+  });
+  $("diagCopy").addEventListener("click", async ()=>{
+    try{ await navigator.clipboard.writeText(diagText()); $("diagMsg").textContent = "Copied."; }
+    catch(e){ $("diagMsg").textContent = "Couldn't copy. Long-press the text above to select it."; }
   });
 
   // ---------- boot ----------
