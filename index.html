@@ -63,6 +63,11 @@
   .confirm.show{display:flex}
   .warn{display:none;background:#3a2e0f;border:1px solid var(--warn);color:var(--warn);border-radius:12px;padding:10px 12px;margin:0 0 12px;font-size:14px}
   .warn.show{display:block}
+  .call .seq{font-size:14px;color:var(--muted);min-height:18px}
+  .call .seq b{color:var(--accent)}
+  .combo-add{flex-wrap:wrap}
+  .combo-add select{flex:1 1 28%;min-width:0}
+  .combo-name{flex:1;min-width:0;font-size:15px}
 </style>
 </head>
 <body>
@@ -73,6 +78,7 @@
   <div class="call" id="callBox">
     <div class="status" id="status">Ready</div>
     <div class="move" id="moveText">Press Start</div>
+    <div class="seq" id="seqText"></div>
     <div class="timer" id="timer">&nbsp;</div>
   </div>
   <div class="controls">
@@ -95,6 +101,19 @@
     <button class="mini" id="addBtn">Add</button>
   </div>
   <div class="save" id="saveState"></div>
+
+  <h2>Combos</h2>
+  <div class="card">
+    <div class="setting"><span>Use combos</span><input type="checkbox" id="combosOn"></div>
+    <div class="setting"><span>Calls that are combos: <b id="comboChanceVal"></b></span><input type="range" id="comboChance" min="0" max="100" step="5"></div>
+    <div class="setting"><span>Pause between combo steps (sec)</span><input type="number" id="stepGap" min="0" max="5" step="0.25"></div>
+  </div>
+  <div class="card" id="comboList" style="margin-top:10px"></div>
+  <div class="add combo-add">
+    <select id="c1"></select><select id="c2"></select><select id="c3"></select>
+    <button class="mini" id="addCombo">Add combo</button>
+  </div>
+  <p class="muted" id="comboMsg">Each step counts toward that move's tally. The combo has its own count too.</p>
 
   <h2>Timing</h2>
   <div class="card">
@@ -149,13 +168,25 @@
     {id:"snap-down",    name:"Snap down",    say:"Snap down",    cat:"Other",    on:false},
   ];
 
+  const DEFAULT_COMBOS = [
+    {id:"c-downblock-sprawl", steps:["down-block","sprawl"], on:true},
+    {id:"c-level-single",     steps:["level-change","single"], on:true},
+    {id:"c-level-double",     steps:["level-change","double"], on:true},
+    {id:"c-cl-level-hc",      steps:["circle-left","level-change","high-crotch"], on:true},
+    {id:"c-cr-level-single",  steps:["circle-right","level-change","single"], on:true},
+  ];
+
   let state = {
-    defaultsVersion: 2,
+    defaultsVersion: 3,
     moves: DEFAULT_MOVES.map(m=>({...m})),
     counts: {},          // all-time, by move id
-    settings: {minGap:3, maxGap:6, roundLen:120, restLen:30, rounds:3, shotBias:50, rate:1.05, voice:""}
+    combos: DEFAULT_COMBOS.map(c=>({...c, steps:[...c.steps]})),
+    comboCounts: {},     // all-time, by combo id
+    settings: {minGap:3, maxGap:6, roundLen:120, restLen:30, rounds:3, shotBias:50, rate:1.05, voice:"",
+               combosOn:true, comboChance:30, stepGap:1}
   };
   let session = {};      // session counts by move id
+  let sessionCombos = {}; // session counts by combo id
 
   const $ = id => document.getElementById(id);
 
@@ -167,9 +198,11 @@
     if(Array.isArray(saved.moves) && saved.moves.length) state.moves = saved.moves;
     if(saved.counts && typeof saved.counts === "object") state.counts = saved.counts;
     if(saved.settings) state.settings = Object.assign(state.settings, saved.settings);
+    if(Array.isArray(saved.combos)) state.combos = saved.combos;
+    if(saved.comboCounts && typeof saved.comboCounts === "object") state.comboCounts = saved.comboCounts;
     // one-time update: turn Sprawl on for devices saved before it became a default
     if((saved.defaultsVersion||1) < 2){ const sp = state.moves.find(m=>m.id==="sprawl"); if(sp) sp.on = true; }
-    state.defaultsVersion = 2;
+    state.defaultsVersion = 3;
   }
   function scheduleSave(){
     try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); $("saveState").textContent = "Saved on this device"; }
@@ -190,12 +223,13 @@
   }
   if(synth){ populateVoices(); synth.onvoiceschanged = populateVoices; }
 
-  function say(text, onStart){
+  function say(text, onStart, onEnd){
     if(!synth) return;
     try{
       synth.cancel();
       const u = new SpeechSynthesisUtterance(text);
       if(onStart){ u.onstart = onStart; }
+      if(onEnd){ u.onend = onEnd; u.onerror = onEnd; }
       u.rate = Number(state.settings.rate) || 1;
       const v = voices.find(v=>v.name === state.settings.voice);
       if(v) u.voice = v;
@@ -221,7 +255,55 @@
         </div>
       </div>`).join("");
     updateTotals();
+    renderCombos();
   }
+
+  // ---------- combos UI ----------
+  function moveName(id){ const m = state.moves.find(m=>m.id===id); return m ? m.name : "(deleted move)"; }
+  function comboLabel(c){ return c.steps.map(moveName).join(" → "); }
+  function renderCombos(){
+    const list = $("comboList");
+    list.innerHTML = state.combos.length ? state.combos.map((c,i)=>`
+      <div class="row">
+        <label class="move-opt"><input type="checkbox" data-ci="${i}" ${c.on?"checked":""}><span class="combo-name">${esc(comboLabel(c))}</span></label>
+        <div class="tally">
+          <button class="mini" data-cdec="${i}">−</button>
+          <span class="s">${sessionCombos[c.id]||0}</span>
+          <span class="n">${state.comboCounts[c.id]||0}</span>
+          <button class="mini" data-cinc="${i}">+</button>
+          <button class="del" data-cdel="${i}" title="Remove">✕</button>
+        </div>
+      </div>`).join("") : '<div class="row muted">No combos yet. Build one below.</div>';
+    const keep = ["c1","c2","c3"].map(id=>$(id).value);
+    const opts = state.moves.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("");
+    $("c1").innerHTML = '<option value="">Step 1</option>' + opts;
+    $("c2").innerHTML = '<option value="">Step 2</option>' + opts;
+    $("c3").innerHTML = '<option value="">Step 3 (optional)</option>' + opts;
+    ["c1","c2","c3"].forEach((id,k)=>{ $(id).value = keep[k] || ""; });
+  }
+  function bumpCombo(id, d){
+    state.comboCounts[id] = Math.max(0, (state.comboCounts[id]||0) + d);
+    sessionCombos[id] = Math.max(0, (sessionCombos[id]||0) + d);
+    renderCombos(); scheduleSave();
+  }
+  $("comboList").addEventListener("click", e=>{
+    const t = e.target;
+    if(t.dataset.cinc!==undefined){ bumpCombo(state.combos[+t.dataset.cinc].id, 1); }
+    else if(t.dataset.cdec!==undefined){ bumpCombo(state.combos[+t.dataset.cdec].id, -1); }
+    else if(t.dataset.cdel!==undefined){ state.combos.splice(+t.dataset.cdel,1); renderCombos(); scheduleSave(); }
+  });
+  $("comboList").addEventListener("change", e=>{
+    const t = e.target;
+    if(t.dataset.ci!==undefined){ state.combos[+t.dataset.ci].on = t.checked; scheduleSave(); }
+  });
+  $("addCombo").addEventListener("click", ()=>{
+    const steps = ["c1","c2","c3"].map(id=>$(id).value).filter(Boolean);
+    if(steps.length < 2){ $("comboMsg").textContent = "Pick at least 2 steps."; return; }
+    state.combos.push({id:"c-" + Date.now().toString(36), steps, on:true});
+    ["c1","c2","c3"].forEach(id=>$(id).value = "");
+    $("comboMsg").textContent = "Added: " + steps.map(moveName).join(" → ");
+    renderCombos(); scheduleSave();
+  });
   function updateTotals(){
     $("sessTotal").textContent = Object.values(session).reduce((a,b)=>a+b,0);
     $("allTotal").textContent = Object.values(state.counts).reduce((a,b)=>a+b,0);
@@ -253,8 +335,14 @@
     renderMoves(); scheduleSave();
   });
 
-  const fields = ["minGap","maxGap","roundLen","restLen","rounds","shotBias","rate"];
-  function applySettingsToUI(){ fields.forEach(f=>$(f).value = state.settings[f]); }
+  const fields = ["minGap","maxGap","roundLen","restLen","rounds","shotBias","rate","comboChance","stepGap"];
+  function applySettingsToUI(){
+    fields.forEach(f=>$(f).value = state.settings[f]);
+    $("combosOn").checked = !!state.settings.combosOn;
+    $("comboChanceVal").textContent = state.settings.comboChance + "%";
+  }
+  $("combosOn").addEventListener("change", ()=>{ state.settings.combosOn = $("combosOn").checked; scheduleSave(); });
+  $("comboChance").addEventListener("input", ()=>{ $("comboChanceVal").textContent = $("comboChance").value + "%"; });
   fields.forEach(f=>$(f).addEventListener("change", ()=>{
     let v = parseFloat($(f).value);
     if(isNaN(v)) v = state.settings[f];
@@ -273,13 +361,14 @@
     }, 2500);
   });
 
-  $("resetSess").addEventListener("click", ()=>{ session = {}; renderMoves(); });
+  $("resetSess").addEventListener("click", ()=>{ session = {}; sessionCombos = {}; renderMoves(); });
   $("resetAll").addEventListener("click", ()=>$("confirmBox").classList.add("show"));
   $("confirmNo").addEventListener("click", ()=>$("confirmBox").classList.remove("show"));
-  $("confirmYes").addEventListener("click", ()=>{ state.counts = {}; session = {}; $("confirmBox").classList.remove("show"); renderMoves(); scheduleSave(); });
+  $("confirmYes").addEventListener("click", ()=>{ state.counts = {}; state.comboCounts = {}; session = {}; sessionCombos = {}; $("confirmBox").classList.remove("show"); renderMoves(); scheduleSave(); });
 
   // ---------- drill engine ----------
   let running = false, paused = false, phase = "idle", round = 0, phaseEnd = 0, nextCallAt = 0, lastId = null, tick = null, pausedRemain = null, wakeLock = null;
+  let inSeq = false, seqToken = 0, seqTimer = null, lastComboId = null;
 
   function pickMove(){
     const on = state.moves.filter(m=>m.on);
@@ -299,16 +388,58 @@
     const a = state.settings.minGap, b = Math.max(a, state.settings.maxGap);
     return (a + Math.random()*(b-a)) * 1000;
   }
-  function show(status, move, cls){
+  function show(status, move, cls, seqHtml){
     $("status").textContent = status;
     $("moveText").textContent = move;
+    $("seqText").innerHTML = seqHtml || "";
     const box = $("callBox");
     box.classList.remove("flash","rest");
     if(cls){ void box.offsetWidth; box.classList.add(cls); }
   }
   function fmt(ms){ const s = Math.max(0, Math.ceil(ms/1000)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
 
+  function validCombos(){
+    return state.combos.filter(c => c.on && c.steps.filter(id => state.moves.some(m=>m.id===id)).length >= 2);
+  }
+  function pickCombo(){
+    let list = validCombos();
+    if(!list.length) return null;
+    if(list.length > 1) list = list.filter(c => c.id !== lastComboId);
+    return list[Math.floor(Math.random()*list.length)];
+  }
+  function cancelSeq(){ seqToken++; inSeq = false; clearTimeout(seqTimer); }
+  function runCombo(c){
+    const steps = c.steps.map(id => state.moves.find(m=>m.id===id)).filter(Boolean);
+    if(steps.length < 2) return false;
+    cancelSeq();
+    const tok = seqToken; inSeq = true; lastComboId = c.id; lastId = steps[steps.length-1].id;
+    bumpCombo(c.id, 1);
+    let i = 0;
+    const next = () => {
+      if(tok !== seqToken) return;
+      if(i >= steps.length){ inSeq = false; nextCallAt = Date.now() + gap(); return; }
+      const m = steps[i], k = i;
+      const seqHtml = steps.map((s,j)=> j===k ? "<b>"+esc(s.name)+"</b>" : esc(s.name)).join(" → ");
+      show("Round " + round + " · Combo " + (k+1) + "/" + steps.length, m.name, "flash", seqHtml);
+      let finished = false;
+      const done = () => {
+        if(finished || tok !== seqToken) return;
+        finished = true; clearTimeout(seqTimer);
+        seqTimer = setTimeout(next, (Number(state.settings.stepGap)||0) * 1000);
+      };
+      say(m.say || m.name, null, done);
+      bump(m.id, 1); i++;
+      // fallback in case the browser never reports the end of speech
+      const rate = Number(state.settings.rate) || 1;
+      clearTimeout(seqTimer);
+      seqTimer = setTimeout(done, 900 + (m.say || m.name).length * 85 / rate);
+    };
+    next();
+    return true;
+  }
+
   function startRound(){
+    cancelSeq();
     round++; phase = "work";
     $("roundNow").textContent = round + "/" + state.settings.rounds;
     phaseEnd = Date.now() + state.settings.roundLen*1000;
@@ -340,12 +471,23 @@
     $("timer").textContent = (phase==="work"?"Round ":"Rest ") + fmt(phaseEnd-now);
     if(phase==="work"){
       if(now >= phaseEnd){
+        cancelSeq();
         if(round >= state.settings.rounds) return finish();
         return state.settings.restLen>0 ? startRest() : startRound();
       }
+      if(inSeq) return;
       if(now >= nextCallAt && phaseEnd - now > 1200){
+        const comboOk = state.settings.combosOn && phaseEnd - now > 3000;
+        if(comboOk && Math.random()*100 < state.settings.comboChance){
+          const c = pickCombo();
+          if(c && runCombo(c)) return;
+        }
         const m = pickMove();
-        if(!m){ show("No moves on","Tick some moves below"); nextCallAt = now + 2000; return; }
+        if(!m){
+          const c = comboOk ? pickCombo() : null;
+          if(c && runCombo(c)) return;
+          show("No moves on","Tick some moves below"); nextCallAt = now + 2000; return;
+        }
         lastId = m.id;
         show("Round " + round, m.name, "flash");
         say(m.say || m.name);
@@ -363,7 +505,8 @@
   function unlockScreen(){ try{ wakeLock && wakeLock.release(); }catch(e){} wakeLock = null; }
 
   function start(){
-    if(!state.moves.some(m=>m.on)){ show("No moves on","Tick some moves below"); return; }
+    if(!state.moves.some(m=>m.on) && !(state.settings.combosOn && validCombos().length)){ show("No moves on","Tick some moves below"); return; }
+    cancelSeq(); lastComboId = null;
     running = true; paused = false; round = 0; lastId = null; loop.warned = false;
     phase = "countdown"; phaseEnd = Date.now() + 3000;
     show("Get set", "Stance up");
@@ -375,7 +518,7 @@
   }
   function stop(){
     running = false; paused = false; phase = "idle";
-    clearInterval(tick);
+    clearInterval(tick); cancelSeq();
     if(synth) synth.cancel();
     $("startBtn").textContent = "Start"; $("startBtn").classList.remove("stop");
     $("pauseBtn").disabled = true; $("pauseBtn").textContent = "Pause";
@@ -387,7 +530,8 @@
   $("pauseBtn").addEventListener("click", ()=>{
     if(!running) return;
     if(!paused){
-      paused = true; pausedRemain = {phase: phaseEnd - Date.now(), call: nextCallAt - Date.now()};
+      const wasSeq = inSeq; cancelSeq();
+      paused = true; pausedRemain = {phase: phaseEnd - Date.now(), call: wasSeq ? 1500 : nextCallAt - Date.now()};
       if(synth) synth.cancel();
       $("pauseBtn").textContent = "Resume"; $("status").textContent = "Paused";
     } else {
@@ -405,6 +549,10 @@
     const lines = ["Wrestling Drill Caller backup", "Saved: " + d.toLocaleString(), "", "All-time tallies:"];
     state.moves.forEach(m => lines.push("  " + m.name + ": " + (state.counts[m.id]||0)));
     lines.push("  Total: " + Object.values(state.counts).reduce((a,b)=>a+b,0));
+    if(state.combos.length){
+      lines.push("", "Combos:");
+      state.combos.forEach(c => lines.push("  " + comboLabel(c) + ": " + (state.comboCounts[c.id]||0)));
+    }
     lines.push("", "Keep the line below to restore this backup in the app.");
     lines.push("DATA: " + JSON.stringify(state));
     return lines.join("\n") + "\n";
@@ -430,7 +578,7 @@
       if(!line) throw new Error("no data line");
       const data = JSON.parse(line.slice(6));
       if(!data || !Array.isArray(data.moves) || typeof data.counts !== "object") throw new Error("bad data");
-      merge(data); session = {};
+      merge(data); session = {}; sessionCombos = {};
       applySettingsToUI(); renderMoves(); populateVoices(); scheduleSave();
       $("backupMsg").textContent = "Restored backup from " + f.name + ".";
     }catch(e){ $("backupMsg").textContent = "That file isn't a drill caller backup."; }
