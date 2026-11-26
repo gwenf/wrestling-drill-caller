@@ -7,17 +7,25 @@
   </defs>
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
   <circle cx="256" cy="256" r="196" fill="#14243f"/>
-  <!-- mat floor -->
-  <rect x="0" y="352" width="512" height="200" fill="#0d1628" clip-path="url(#mat)"/>
-  <line x1="40" y1="352" x2="472" y2="352" stroke="#ff5a36" stroke-opacity=".7" stroke-width="6" clip-path="url(#mat)"/>
-  <circle cx="256" cy="256" r="196" fill="none" stroke="#ff5a36" stroke-width="22"/>
-  <!-- wrestler shooting a penetration step, facing right -->
-  <g fill="none" stroke="#f4f1ea" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M196 262 L140 304 L92 338" stroke-width="38"/>
-    <path d="M196 262 L262 330 L208 340" stroke-width="40"/>
-    <path d="M196 262 L300 210" stroke-width="56"/>
-    <path d="M302 216 L362 258 L414 250" stroke-width="30"/>
-    <path d="M290 226 L338 282 L394 294" stroke-width="30"/>
+  <g clip-path="url(#mat)">
+    <rect x="0" y="352" width="512" height="200" fill="#0d1628"/>
+    <line x1="40" y1="352" x2="472" y2="352" stroke="#ff5a36" stroke-opacity=".7" stroke-width="6"/>
+    <!-- opponent's legs (the target) -->
+    <g stroke="#5f7fbf" stroke-linecap="round" fill="none">
+      <path d="M372 40 L364 336" stroke-width="32"/>
+      <path d="M414 40 L422 336" stroke-width="32"/>
+      <path d="M364 336 L342 340" stroke-width="22"/>
+      <path d="M422 336 L444 340" stroke-width="22"/>
+    </g>
   </g>
-  <circle cx="346" cy="174" r="36" fill="#f4f1ea"/>
+  <circle cx="256" cy="256" r="196" fill="none" stroke="#ff5a36" stroke-width="22"/>
+  <!-- shooter: head up, back straight, lead knee down, hands on the legs -->
+  <g transform="translate(-16 0)"><g fill="none" stroke="#f4f1ea" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M196 256 L132 304 L94 340" stroke-width="36"/>
+    <path d="M196 256 L262 336 L198 342" stroke-width="38"/>
+    <path d="M196 256 L284 198" stroke-width="56"/>
+    <path d="M288 204 L340 244 L388 240" stroke-width="28"/>
+    <path d="M278 214 L322 266 L382 282" stroke-width="28"/>
+  </g>
+  <circle cx="320" cy="156" r="34" fill="#f4f1ea"/></g>
 </svg>
