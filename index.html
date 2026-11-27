@@ -83,6 +83,20 @@
   .sheet .head{display:flex;justify-content:space-between;align-items:center;position:sticky;top:-18px;background:var(--panel);padding:4px 0 8px}
   .diag{font:13px/1.5 ui-monospace,Menlo,monospace;background:#0f1115;border:1px solid var(--line);border-radius:10px;padding:10px;white-space:pre-wrap;word-break:break-word;color:#cfd4dd}
   .ok{color:var(--accent2)} .bad{color:var(--warn)}
+  .h2row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  .linkbtn{background:none;border:none;padding:4px 0;color:var(--muted);font-size:13px;cursor:pointer}
+  .linkbtn b{color:var(--text);font-weight:600}
+  .wrow{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .wrow:last-child{border-bottom:none}
+  .wrow .wname{flex:1;min-width:0;font-size:15px;overflow-wrap:anywhere}
+  .wrow.off .wname{color:var(--muted)}
+  .bars{display:flex;align-items:flex-end;gap:6px;height:30px}
+  .bars button{width:22px;min-height:12px;padding:0;border-radius:4px;border:none;background:#2f3542}
+  .bars button.on{background:var(--accent)}
+  .wrow.off .bars button.on{background:#6b5047}
+  .wpct{width:44px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:14px}
+  .sheet .foot{display:flex;gap:8px;margin-top:14px}
+  .sheet .foot button{flex:1}
 </style>
 </head>
 <body>
@@ -110,7 +124,10 @@
     <div><b id="roundNow">–</b><span>Round</span></div>
   </div>
 
-  <h2>Moves &amp; tally</h2>
+  <div class="h2row">
+    <h2>Moves &amp; tally</h2>
+    <button class="linkbtn" id="wEdit">Call frequency: <b id="wMode">Default</b> ›</button>
+  </div>
   <div class="card" id="moveList"></div>
   <div class="legend"><span><span class="s">green</span> = this session</span><span><b>white</b> = all time</span></div>
   <div class="add">
@@ -139,7 +156,6 @@
     <div class="setting"><span>Round length (sec)</span><input type="number" id="roundLen" min="10" max="900" step="10"></div>
     <div class="setting"><span>Rest (sec)</span><input type="number" id="restLen" min="0" max="300" step="5"></div>
     <div class="setting"><span>Rounds</span><input type="number" id="rounds" min="1" max="20"></div>
-    <div class="setting"><span>Shots vs. movement</span><span class="muted" style="display:flex;align-items:center;gap:8px">Move <input type="range" id="shotBias" min="0" max="100"> Shot</span></div>
   </div>
   <p class="muted">Each call is counted the moment it's spoken. Use − / + to fix a rep you missed or didn't do.</p>
 
@@ -170,6 +186,18 @@
   </div>
 </main>
 
+<div class="modal" id="weightsModal" role="dialog" aria-modal="true" aria-labelledby="wTitle">
+  <div class="sheet">
+    <div class="head"><strong id="wTitle" style="font-size:18px">Call frequency</strong><button class="mini" id="wDone">Done</button></div>
+    <p class="muted" style="margin:0 0 6px">More bars = called more often. The % is each move's share of single calls. Combos aren't affected.</p>
+    <div id="wList"></div>
+    <div class="foot">
+      <button class="mini" id="wEqual">Make all equal</button>
+      <button class="mini" id="wReset">Reset to defaults</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="infoModal" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
   <div class="sheet">
     <div class="head"><strong id="infoTitle" style="font-size:18px">How to use</strong><button class="mini" id="infoClose">Close</button></div>
@@ -198,7 +226,7 @@
     <h3>Timing</h3>
     <ul>
       <li><b>Seconds between calls</b>: each gap is random within this range.</li>
-      <li><b>Shots vs. movement</b>: slide right for more shots, left for more footwork and defense.</li>
+      <li><b>Call frequency</b> (top right of the move list): set how often each move is called compared with the others. By default circling is called most, then level change and down block, then everything else.</li>
     </ul>
 
     <h3>Saving your data</h3>
@@ -251,6 +279,11 @@
     {id:"snap-down",    name:"Snap down",    say:"Snap down",    cat:"Other",    on:false},
   ];
 
+  // Call frequency: 1–5. Circling most, then level change / down block, then everything else.
+  const DEFAULT_WEIGHTS = {"circle-left":4, "circle-right":4, "level-change":3, "down-block":3};
+  const defWeight = id => DEFAULT_WEIGHTS[id] || 2;
+  const weightOf = m => (m.weight >= 1 && m.weight <= 5) ? m.weight : defWeight(m.id);
+
   const DEFAULT_COMBOS = [
     {id:"c-downblock-sprawl", steps:["down-block","sprawl"], on:true},
     {id:"c-level-single",     steps:["level-change","single"], on:true},
@@ -265,7 +298,7 @@
     counts: {},          // all-time, by move id
     combos: DEFAULT_COMBOS.map(c=>({...c, steps:[...c.steps]})),
     comboCounts: {},     // all-time, by combo id
-    settings: {minGap:3, maxGap:6, roundLen:120, restLen:30, rounds:3, shotBias:50, rate:1.05, voice:"",
+    settings: {minGap:3, maxGap:6, roundLen:120, restLen:30, rounds:3, rate:1.05, voice:"",
                combosOn:true, comboChance:30, stepGap:1}
   };
   let session = {};      // session counts by move id
@@ -339,6 +372,7 @@
       </div>`).join("");
     updateTotals();
     renderCombos();
+    updateWeightLabel();
   }
 
   // ---------- combos UI ----------
@@ -413,12 +447,12 @@
     const name = $("newMove").value.trim();
     if(!name) return;
     const id = "custom-" + name.toLowerCase().replace(/[^a-z0-9]+/g,"-") + "-" + Date.now().toString(36);
-    state.moves.push({id, name, say:name, cat:$("newCat").value, on:true, custom:true});
+    state.moves.push({id, name, say:name, cat:$("newCat").value, on:true, custom:true, weight:2});
     $("newMove").value = "";
     renderMoves(); scheduleSave();
   });
 
-  const fields = ["minGap","maxGap","roundLen","restLen","rounds","shotBias","rate","comboChance","stepGap"];
+  const fields = ["minGap","maxGap","roundLen","restLen","rounds","rate","comboChance","stepGap"];
   function applySettingsToUI(){
     fields.forEach(f=>$(f).value = state.settings[f]);
     $("combosOn").checked = !!state.settings.combosOn;
@@ -456,10 +490,8 @@
   function pickMove(){
     const on = state.moves.filter(m=>m.on);
     if(!on.length) return null;
-    const bias = state.settings.shotBias/100;           // 0 = movement-heavy, 1 = shot-heavy
     const weighted = on.map(m=>{
-      let w = m.cat==="Shot" ? 0.3 + bias*1.4 : 1.7 - bias*1.4;
-      if(m.cat==="Other") w = 1;
+      let w = weightOf(m);
       if(m.id===lastId && on.length>1) w *= 0.15;          // avoid back-to-back repeats
       return {m, w:Math.max(0.05,w)};
     });
@@ -667,6 +699,39 @@
     }catch(e){ $("backupMsg").textContent = "That file isn't a drill caller backup."; }
   });
 
+  // ---------- call frequency (weights) ----------
+  function weightMode(){
+    if(state.moves.every(m => weightOf(m) === defWeight(m.id))) return "Default";
+    const first = state.moves.length ? weightOf(state.moves[0]) : 0;
+    if(state.moves.every(m => weightOf(m) === first)) return "Equal";
+    return "Custom";
+  }
+  function updateWeightLabel(){ $("wMode").textContent = weightMode(); }
+  function renderWeights(){
+    const on = state.moves.filter(m=>m.on);
+    const total = on.reduce((a,m)=>a+weightOf(m),0);
+    $("wList").innerHTML = state.moves.map((m,i)=>{
+      const w = weightOf(m);
+      const pct = m.on && total ? Math.round(weightOf(m)/total*100) + "%" : "off";
+      const bars = [1,2,3,4,5].map(k=>`<button data-wi="${i}" data-wk="${k}" class="${k<=w?"on":""}" style="height:${8+k*4}px" aria-label="${esc(m.name)}: frequency ${k} of 5"></button>`).join("");
+      return `<div class="wrow ${m.on?"":"off"}"><span class="wname">${esc(m.name)}</span><span class="bars">${bars}</span><span class="wpct">${pct}</span></div>`;
+    }).join("");
+    updateWeightLabel();
+  }
+  function setWeights(fn){ state.moves.forEach(m=>{ m.weight = fn(m); }); renderWeights(); scheduleSave(); }
+  $("wList").addEventListener("click", e=>{
+    const t = e.target;
+    if(t.dataset.wi===undefined) return;
+    state.moves[+t.dataset.wi].weight = +t.dataset.wk;
+    renderWeights(); scheduleSave();
+  });
+  $("wEqual").addEventListener("click", ()=>setWeights(()=>3));
+  $("wReset").addEventListener("click", ()=>setWeights(m=>defWeight(m.id)));
+  $("wEdit").addEventListener("click", ()=>{ renderWeights(); $("weightsModal").classList.add("show"); });
+  function closeWeights(){ $("weightsModal").classList.remove("show"); }
+  $("wDone").addEventListener("click", closeWeights);
+  $("weightsModal").addEventListener("click", e=>{ if(e.target === $("weightsModal")) closeWeights(); });
+
   // ---------- info / diagnostics ----------
   let lastSpeechResult = "not tested yet";
   function storageOk(){ try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); return true; }catch(e){ return false; } }
@@ -693,7 +758,7 @@
   $("infoBtn").addEventListener("click", openInfo);
   $("infoClose").addEventListener("click", closeInfo);
   $("infoModal").addEventListener("click", e=>{ if(e.target === $("infoModal")) closeInfo(); });
-  document.addEventListener("keydown", e=>{ if(e.key === "Escape") closeInfo(); });
+  document.addEventListener("keydown", e=>{ if(e.key === "Escape"){ closeInfo(); closeWeights(); } });
   $("diagTest").addEventListener("click", ()=>{
     if(!synth){ lastSpeechResult = "speech not supported"; refreshDiag(); return; }
     let started = false;
