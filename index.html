@@ -305,12 +305,12 @@
   ];
 
   let state = {
-    defaultsVersion: 3,
+    defaultsVersion: 4,
     moves: DEFAULT_MOVES.map(m=>({...m})),
     counts: {},          // all-time, by move id
     combos: DEFAULT_COMBOS.map(c=>({...c, steps:[...c.steps]})),
     comboCounts: {},     // all-time, by combo id
-    settings: {minGap:3, maxGap:6, roundLen:120, restLen:30, rounds:3, rate:1.05, voice:"",
+    settings: {minGap:2, maxGap:5, roundLen:120, restLen:30, rounds:3, rate:1.05, voice:"",
                combosOn:true, comboChance:30, stepGap:1}
   };
   let session = {};      // session counts by move id
@@ -330,7 +330,9 @@
     if(saved.comboCounts && typeof saved.comboCounts === "object") state.comboCounts = saved.comboCounts;
     // one-time update: turn Sprawl on for devices saved before it became a default
     if((saved.defaultsVersion||1) < 2){ const sp = state.moves.find(m=>m.id==="sprawl"); if(sp) sp.on = true; }
-    state.defaultsVersion = 3;
+    // one-time update: move untouched old gap defaults (3–6s) to the new 2–5s
+    if((saved.defaultsVersion||1) < 4 && state.settings.minGap === 3 && state.settings.maxGap === 6){ state.settings.minGap = 2; state.settings.maxGap = 5; }
+    state.defaultsVersion = 4;
   }
   function scheduleSave(){
     try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); $("saveState").textContent = "Saved on this device"; }
