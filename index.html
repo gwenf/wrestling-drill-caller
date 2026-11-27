@@ -97,6 +97,10 @@
   .wpct{width:44px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:14px}
   .sheet .foot{display:flex;gap:8px;margin-top:14px}
   .sheet .foot button{flex:1}
+  .seg{display:flex;background:#0f1115;border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px;margin:4px 0 10px}
+  .seg button{flex:1;border:none;background:none;border-radius:9px;padding:9px 4px;font-size:14px;color:var(--muted)}
+  .seg button.sel{background:var(--accent);color:#fff;font-weight:700}
+  .sheet .label{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-top:8px}
 </style>
 </head>
 <body>
@@ -189,7 +193,15 @@
 <div class="modal" id="weightsModal" role="dialog" aria-modal="true" aria-labelledby="wTitle">
   <div class="sheet">
     <div class="head"><strong id="wTitle" style="font-size:18px">Call frequency</strong><button class="mini" id="wDone">Done</button></div>
-    <p class="muted" style="margin:0 0 6px">More bars = called more often. The % is each move's share of single calls. Combos aren't affected.</p>
+    <div class="label">Focus</div>
+    <div class="seg" id="focusSeg">
+      <button data-focus="mix">Mix</button>
+      <button data-focus="shots">Only shots</button>
+      <button data-focus="movement">Only movement</button>
+    </div>
+    <p class="muted" style="margin:0 0 6px" id="focusNote"></p>
+    <div class="label">Frequency</div>
+    <p class="muted" style="margin:4px 0 6px">More bars = called more often. The % is each move's share of single calls.</p>
     <div id="wList"></div>
     <div class="foot">
       <button class="mini" id="wEqual">Make all equal</button>
@@ -434,7 +446,7 @@
   });
   $("moveList").addEventListener("change", e=>{
     const t = e.target;
-    if(t.dataset.i!==undefined){ state.moves[+t.dataset.i].on = t.checked; scheduleSave(); }
+    if(t.dataset.i!==undefined){ state.moves[+t.dataset.i].on = t.checked; updateWeightLabel(); scheduleSave(); }
   });
 
   function bump(id, d){
@@ -514,7 +526,8 @@
   function fmt(ms){ const s = Math.max(0, Math.ceil(ms/1000)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
 
   function validCombos(){
-    return state.combos.filter(c => c.on && c.steps.filter(id => state.moves.some(m=>m.id===id)).length >= 2);
+    // a combo is used only when every move in it is turned on
+    return state.combos.filter(c => c.on && c.steps.length >= 2 && c.steps.every(id => state.moves.some(m=>m.id===id && m.on)));
   }
   function pickCombo(){
     let list = validCombos();
@@ -706,7 +719,33 @@
     if(state.moves.every(m => weightOf(m) === first)) return "Equal";
     return "Custom";
   }
-  function updateWeightLabel(){ $("wMode").textContent = weightMode(); }
+  // Focus presets switch moves on/off by category. "Mix" restores what was on before.
+  const isShot = m => m.cat === "Shot";
+  const isMovement = m => m.cat === "Movement" || m.cat === "Defense";
+  function currentFocus(){
+    const on = state.moves.filter(m=>m.on);
+    if(on.length && state.moves.every(m => m.on === isShot(m))) return "shots";
+    if(on.length && state.moves.every(m => m.on === isMovement(m))) return "movement";
+    return "mix";
+  }
+  function applyFocus(f){
+    const cur = currentFocus();
+    if(f === cur) return;
+    if(f === "mix"){
+      const snap = state.mixSnapshot;
+      state.moves.forEach(m => { m.on = snap && (m.id in snap) ? snap[m.id] : true; });
+      state.mixSnapshot = null;
+    } else {
+      if(cur === "mix"){ state.mixSnapshot = {}; state.moves.forEach(m => state.mixSnapshot[m.id] = m.on); }
+      state.moves.forEach(m => { m.on = f === "shots" ? isShot(m) : isMovement(m); });
+    }
+    renderMoves(); renderWeights(); scheduleSave();
+  }
+  $("focusSeg").addEventListener("click", e=>{ const f = e.target.dataset.focus; if(f) applyFocus(f); });
+  function updateWeightLabel(){
+    const f = currentFocus();
+    $("wMode").textContent = f === "shots" ? "Only shots" : f === "movement" ? "Only movement" : weightMode();
+  }
   function renderWeights(){
     const on = state.moves.filter(m=>m.on);
     const total = on.reduce((a,m)=>a+weightOf(m),0);
@@ -716,6 +755,12 @@
       const bars = [1,2,3,4,5].map(k=>`<button data-wi="${i}" data-wk="${k}" class="${k<=w?"on":""}" style="height:${8+k*4}px" aria-label="${esc(m.name)}: frequency ${k} of 5"></button>`).join("");
       return `<div class="wrow ${m.on?"":"off"}"><span class="wname">${esc(m.name)}</span><span class="bars">${bars}</span><span class="wpct">${pct}</span></div>`;
     }).join("");
+    const f = currentFocus();
+    document.querySelectorAll("#focusSeg button").forEach(b => b.classList.toggle("sel", b.dataset.focus === f));
+    $("focusNote").textContent =
+      f === "shots" ? "Only shot moves are called. Combos that include other moves are skipped." :
+      f === "movement" ? "Only movement and defense (circling, level change, down block, sprawl). Combos that include shots are skipped." :
+      "All the moves you've ticked are called.";
     updateWeightLabel();
   }
   function setWeights(fn){ state.moves.forEach(m=>{ m.weight = fn(m); }); renderWeights(); scheduleSave(); }
